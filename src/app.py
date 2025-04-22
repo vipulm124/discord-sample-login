@@ -91,8 +91,18 @@ def get_userinfo():
     }
     r = requests.get('https://discord.com/api/v10/users/@me', headers=headers)
     r.raise_for_status()
-    return r.json()
+    user = r.json()
+    user['avatar'] = get_user_avatar(user)
+    return user
 
+
+
+def get_user_avatar(user):
+    """Get user profile image"""
+    if user['avatar'] is None:
+        return "https://cdn.discordapp.com/embed/avatars/0.png"
+    return f"https://cdn.discordapp.com/avatars/{user['id']}/{user['avatar']}.png?size=1024"
+    
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
