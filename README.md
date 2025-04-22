@@ -54,6 +54,20 @@ This repository demonstrates how to implement Discord OAuth2 login in a web appl
 6. You can then go to the swagger document at `http://127.0.0.1:5000/apidocs/` and use the `/getuserinfo/` endpoint to get user information.
    It will required the access_token fetched in previous step as part of the request.
 
+7. Output
+
+Login:
+
+![Login Page](screenshots/login.png)
+
+Callback:
+
+![Response token object](screenshots/token.png)
+
+Swagger/UserInfo:
+
+![User Info](screenshots/userinfo.png)
+
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
