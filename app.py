@@ -18,13 +18,6 @@ app.config['SWAGGER'] = {
 
 swagger = Swagger(app)
 
-# Discord OAuth2 configuration
-# CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
-# CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
-# REDIRECT_URI = 'http://127.0.0.1:5000/callback'
-# AUTHORIZATION_BASE_URL = 'https://discord.com/api/oauth2/authorize'
-# TOKEN_URL = 'https://discord.com/api/v10/oauth2/token'
-# SCOPE = ['identify', 'email']
 
 @app.get('/login')
 def login():
