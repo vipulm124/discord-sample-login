@@ -1,22 +1,16 @@
-from flask import Flask, redirect, request, session
-from requests_oauthlib import OAuth2Session
-import os
+from fastapi import FastAPI, Request
 from dotenv import load_dotenv
-import requests
-from flasgger import Swagger
+import os
 from config import config
+import uvicorn
+from fastapi.responses import RedirectResponse
+import requests
+import httpx
 
 load_dotenv()
-app = Flask(__name__)
+app = FastAPI()
 app.secret_key = os.urandom(24)
 
-# Swagger configuration
-app.config['SWAGGER'] = {
-    'title': 'Discord Login API',
-    'uiversion': 3
-}
-
-swagger = Swagger(app)
 
 
 @app.get('/login')
@@ -28,13 +22,19 @@ def login():
       302:
         description: Redirect to Discord's authorization page.
     """
-    discord = OAuth2Session(config.CLIENT_ID, redirect_uri=config.REDIRECT_URI, scope=config.SCOPE)
-    authorization_url, state = discord.authorization_url(config.AUTHORIZATION_BASE_URL)
-    session['oauth_state'] = state
-    return redirect(authorization_url)
+    discord_auth_url = (
+            f"https://discord.com/api/oauth2/authorize"
+            f"?client_id={config.DISCORD_CLIENT_ID}"
+            f"&redirect_uri={config.DISCORD_REDIRECT_URI}"
+            f"&response_type=code"
+            f"&scope={config.DISCORD_SCOPE}"
+        )
+
+    return RedirectResponse(url=discord_auth_url)
+
 
 @app.get("/callback/")
-def callback():
+async def callback(request: Request, code: str = None, state: str = None):
     """
     Handles the callback from Discord, exchanges the code for an access token.
     ---
@@ -53,56 +53,68 @@ def callback():
       200:
         description: Returns the access token and other data.
     """
-    code = request.args.get('code')
-    state = request.args.get('state')
-    data = {
-    'grant_type': 'authorization_code',
-    'code': code,
-    'redirect_uri': config.REDIRECT_URI
-    }
-    headers = {
-    'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    
-    r = requests.post(config.TOKEN_URL, data=data, headers=headers, auth=(config.CLIENT_ID, config.CLIENT_SECRET))
-    r.raise_for_status()
-    return r.json()
+    try:
 
+        data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': config.DISCORD_REDIRECT_URI
+        }
+        headers = {
+        'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(config.DISCORD_TOKEN_URL, data=data, headers=headers, auth=(config.DISCORD_CLIENT_ID, config.DISCORD_CLIENT_SECRET))
+            
 
-@app.get('/getuserinfo/')
-def get_userinfo():
+            access_token = response.json().get('access_token')
+            return await __get_user_info(access_token)
+    except Exception as e:
+        return {"error": str(e)}
+        
+
+async def __get_user_info(access_token):
     """
-    Retrieves user information from Discord using the access token.
+    Fetches user information from Discord using the access token.
     ---
     parameters:
       - name: access_token
         in: query
         type: string
         required: true
-        description: The access token obtained from the callback.
+        description: The access token received from Discord.
     responses:
       200:
-        description: Returns the user information.
+        description: Returns user information.
     """
-    access_token = request.args.get('access_token')
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    r = requests.get('https://discord.com/api/v10/users/@me', headers=headers)
-    r.raise_for_status()
-    user = r.json()
-    user['avatar'] = get_user_avatar(user)
-    return user
+    try:
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get('https://discord.com/api/v10/users/@me', headers=headers)
+            response.raise_for_status()
+            user = response.json()
+            user['avatar'] = __get_user_avatar(user)
+            return user
+    except httpx.HTTPStatusError as e:
+        return {"error": f"HTTP error occurred: {e.response.status_code} - {e.response.text}"}
+    except httpx.RequestError as e:
+        return {"error": f"Request error occurred: {str(e)}"}
+    except Exception as e:
+        return {"error": f"An unexpected error occurred: {str(e)}"}
 
 
 
-def get_user_avatar(user):
+def __get_user_avatar(user):
     """Get user profile image"""
     if user['avatar'] is None:
         return "https://cdn.discordapp.com/embed/avatars/0.png"
     return f"https://cdn.discordapp.com/avatars/{user['id']}/{user['avatar']}.png?size=1024"
     
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+if __name__ == "__main__":
+    uvicorn.run("app:app", port=5000, reload=True)
